@@ -31,10 +31,10 @@ class Config:
     OUTPUT_DIR = "results"
     CHECKPOINT_DIR = "checkpoints"
     
-    IMG_SIZE = 384
+    IMG_SIZE = 256
     NUM_CLASSES = 8
-    EPOCHS = 30
-    BATCH_SIZE = 2
+    EPOCHS = 15
+    BATCH_SIZE = 4
     LEARNING_RATE = 1e-4
     VAL_SPLIT = 0.15
     
@@ -131,7 +131,7 @@ def load_data():
         X.append(img.copy())
         Y.append(msk.copy())
         
-        for _ in range(15):
+        for _ in range(10):
             img_aug = img.copy()
             msk_aug = msk.copy()
             
@@ -371,32 +371,26 @@ def fpn():
     p2 = MaxPooling2D()(c2)
     
     c3 = conv_block(p2, 256)
-    p3 = MaxPooling2D()(c3)
-    
-    c4 = conv_block(p3, 512)
     
     # Top-down pathway
-    p4 = Conv2D(256, 1, padding='same')(c4)
     p3 = Conv2D(256, 1, padding='same')(c3)
     p2 = Conv2D(256, 1, padding='same')(c2)
     
     # Lateral connections
-    m4 = p4
-    m3 = Add()([UpSampling2D()(m4), p3])
+    m3 = p3
     m2 = Add()([UpSampling2D()(m3), p2])
     
     # Final feature maps
-    o4 = Conv2D(256, 3, padding='same')(m4)
     o3 = Conv2D(256, 3, padding='same')(m3)
     o2 = Conv2D(256, 3, padding='same')(m2)
     
-    # Combine feature maps
-    o = Concatenate()([o2, UpSampling2D(2)(o3), UpSampling2D(4)(o4)])
+    # Combine feature maps and upsample to original size
+    o = Concatenate()([o2, UpSampling2D(2)(o3)])
     o = Conv2D(256, 3, padding='same')(o)
     o = BatchNormalization()(o)
     o = Activation('relu')(o)
     
-    # Upsample to original size
+    # Upsample to original size (64 -> 256)
     o = UpSampling2D(4)(o)
     
     o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(o)
@@ -635,8 +629,7 @@ def main():
     model_attn.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     
     h1 = model_attn.fit(X_train, Y_train, validation_data=(X_val, Y_val), 
-                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE, 
-                       steps_per_epoch=len(X_train)//config.BATCH_SIZE,
+                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
                        verbose=1, callbacks=callbacks)
     model_attn.save(f"{config.CHECKPOINT_DIR}/attention_unet.keras")
     histories['Attention U-Net'] = h1
@@ -654,7 +647,6 @@ def main():
     
     h2 = model_unet.fit(X_train, Y_train, validation_data=(X_val, Y_val),
                        epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                       steps_per_epoch=len(X_train)//config.BATCH_SIZE,
                        verbose=1, callbacks=callbacks)
     model_unet.save(f"{config.CHECKPOINT_DIR}/unet.keras")
     histories['U-Net'] = h2
@@ -672,7 +664,6 @@ def main():
     
     h3 = model_deeplab.fit(X_train, Y_train, validation_data=(X_val, Y_val),
                           epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                          steps_per_epoch=len(X_train)//config.BATCH_SIZE,
                           verbose=1, callbacks=callbacks)
     model_deeplab.save(f"{config.CHECKPOINT_DIR}/deeplabv3plus.keras")
     histories['DeepLabV3+'] = h3
@@ -690,7 +681,6 @@ def main():
     
     h4 = model_fpn.fit(X_train, Y_train, validation_data=(X_val, Y_val),
                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                      steps_per_epoch=len(X_train)//config.BATCH_SIZE,
                       verbose=1, callbacks=callbacks)
     model_fpn.save(f"{config.CHECKPOINT_DIR}/fpn.keras")
     histories['FPN'] = h4
