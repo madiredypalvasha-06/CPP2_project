@@ -93,7 +93,9 @@ def compute_class_weights(Y):
     class_counts = np.bincount(Y.flatten(), minlength=config.NUM_CLASSES)
     total = np.sum(class_counts)
     weights = total / (config.NUM_CLASSES * class_counts + 1e-6)
-    return weights / weights.sum() * config.NUM_CLASSES
+    weights = weights / weights.sum() * config.NUM_CLASSES
+    # Convert to dict for Keras
+    return {i: w for i, w in enumerate(weights)}
 
 
 def load_data():
