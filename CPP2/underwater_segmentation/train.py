@@ -33,8 +33,8 @@ class Config:
     
     IMG_SIZE = 384
     NUM_CLASSES = 8
-    EPOCHS = 40
-    BATCH_SIZE = 4
+    EPOCHS = 30
+    BATCH_SIZE = 2
     LEARNING_RATE = 1e-4
     VAL_SPLIT = 0.15
     
@@ -131,7 +131,7 @@ def load_data():
         X.append(img.copy())
         Y.append(msk.copy())
         
-        for _ in range(8):
+        for _ in range(15):
             img_aug = img.copy()
             msk_aug = msk.copy()
             
@@ -634,7 +634,10 @@ def main():
     model_attn = attention_unet()
     model_attn.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     
-    h1 = model_attn.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=config.EPOCHS, batch_size=config.BATCH_SIZE, verbose=1, callbacks=callbacks)
+    h1 = model_attn.fit(X_train, Y_train, validation_data=(X_val, Y_val), 
+                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE, 
+                       steps_per_epoch=len(X_train)//config.BATCH_SIZE,
+                       verbose=1, callbacks=callbacks)
     model_attn.save(f"{config.CHECKPOINT_DIR}/attention_unet.keras")
     histories['Attention U-Net'] = h1
     models['Attention U-Net'] = model_attn
@@ -649,7 +652,10 @@ def main():
     model_unet = unet()
     model_unet.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     
-    h2 = model_unet.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=config.EPOCHS, batch_size=config.BATCH_SIZE, verbose=1, callbacks=callbacks)
+    h2 = model_unet.fit(X_train, Y_train, validation_data=(X_val, Y_val),
+                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                       steps_per_epoch=len(X_train)//config.BATCH_SIZE,
+                       verbose=1, callbacks=callbacks)
     model_unet.save(f"{config.CHECKPOINT_DIR}/unet.keras")
     histories['U-Net'] = h2
     models['U-Net'] = model_unet
@@ -664,7 +670,10 @@ def main():
     model_deeplab = deeplabv3_plus()
     model_deeplab.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     
-    h3 = model_deeplab.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=config.EPOCHS, batch_size=config.BATCH_SIZE, verbose=1, callbacks=callbacks)
+    h3 = model_deeplab.fit(X_train, Y_train, validation_data=(X_val, Y_val),
+                          epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                          steps_per_epoch=len(X_train)//config.BATCH_SIZE,
+                          verbose=1, callbacks=callbacks)
     model_deeplab.save(f"{config.CHECKPOINT_DIR}/deeplabv3plus.keras")
     histories['DeepLabV3+'] = h3
     models['DeepLabV3+'] = model_deeplab
@@ -679,7 +688,10 @@ def main():
     model_fpn = fpn()
     model_fpn.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     
-    h4 = model_fpn.fit(X_train, Y_train, validation_data=(X_val, Y_val), epochs=config.EPOCHS, batch_size=config.BATCH_SIZE, verbose=1, callbacks=callbacks)
+    h4 = model_fpn.fit(X_train, Y_train, validation_data=(X_val, Y_val),
+                      epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                      steps_per_epoch=len(X_train)//config.BATCH_SIZE,
+                      verbose=1, callbacks=callbacks)
     model_fpn.save(f"{config.CHECKPOINT_DIR}/fpn.keras")
     histories['FPN'] = h4
     models['FPN'] = model_fpn
