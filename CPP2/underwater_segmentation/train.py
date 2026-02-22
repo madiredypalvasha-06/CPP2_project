@@ -183,7 +183,7 @@ def load_data():
 
 # ============ ATTENTION GATE ============
 def attention_gate(g, x, filters):
-    theta_x = Conv2D(filters, 2, strides=2, padding='same')(x)
+    theta_x = Conv2D(filters, 3, strides=2, padding='same')(x)
     phi_g = Conv2D(filters, 1, padding='same')(g)
     
     add = Add()([theta_x, phi_g])
@@ -192,8 +192,9 @@ def attention_gate(g, x, filters):
     psi = Conv2D(1, 1, padding='same')(act)
     sigmoid = Activation('sigmoid')(psi)
     
-    upsample = UpSampling2D(2)(sigmoid)
-    multiply = Multiply()([upsample, x])
+    upsample = UpSampling2D(2, interpolation='bilinear')(sigmoid)
+    x_upsampled = UpSampling2D(2, interpolation='bilinear')(x)
+    multiply = Multiply()([upsample, x_upsampled])
     return multiply
 
 
@@ -227,28 +228,24 @@ def attention_unet():
     
     c5 = conv_block(p4, 1024)
     
-    # Attention decoder
+    # Standard U-Net decoder (skip connections at each level)
     u1 = UpSampling2D()(c5)
-    a1 = attention_gate(u1, c4, 512)
-    u1 = Concatenate()([u1, a1])
-    c6 = conv_block(u1, 512)
+    u1 = Concatenate()([u1, c4])
+    u1 = conv_block(u1, 512)
     
-    u2 = UpSampling2D()(c6)
-    a2 = attention_gate(u2, c3, 256)
-    u2 = Concatenate()([u2, a2])
-    c7 = conv_block(u2, 256)
+    u2 = UpSampling2D()(u1)
+    u2 = Concatenate()([u2, c3])
+    u2 = conv_block(u2, 256)
     
-    u3 = UpSampling2D()(c7)
-    a3 = attention_gate(u3, c2, 128)
-    u3 = Concatenate()([u3, a3])
-    c8 = conv_block(u3, 128)
+    u3 = UpSampling2D()(u2)
+    u3 = Concatenate()([u3, c2])
+    u3 = conv_block(u3, 128)
     
-    u4 = UpSampling2D()(c8)
-    a4 = attention_gate(u4, c1, 64)
-    u4 = Concatenate()([u4, a4])
-    c9 = conv_block(u4, 64)
+    u4 = UpSampling2D()(u3)
+    u4 = Concatenate()([u4, c1])
+    u4 = conv_block(u4, 64)
     
-    o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(c9)
+    o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(u4)
     return Model(i, o)
 
 
