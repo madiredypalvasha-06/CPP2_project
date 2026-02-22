@@ -289,65 +289,69 @@ def unet():
 def deeplabv3_plus():
     i = Input((config.IMG_SIZE, config.IMG_SIZE, 3))
     
-    # Encoder
+    # Encoder (shallower to preserve spatial info)
     x = Conv2D(64, 3, padding='same', activation='relu')(i)
     x = BatchNormalization()(x)
     x = Conv2D(64, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    c1 = x
+    c1 = x  # 384
+    
     x = MaxPooling2D()(x)
     
     x = Conv2D(128, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Conv2D(128, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    c2 = x
+    c2 = x  # 192
+    
     x = MaxPooling2D()(x)
     
     x = Conv2D(256, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Conv2D(256, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    c3 = x
+    c3 = x  # 96
+    
     x = MaxPooling2D()(x)
     
     x = Conv2D(512, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Conv2D(512, 3, padding='same', activation='relu')(x)
-    x = BatchNormalization()(x)
-    x = Dropout(0.3)(x)
+    x = BatchNormalization()(x)  # 48
     
-    # ASPP
+    # ASPP with smaller dilation rates (feature map is 48x48)
     a1 = Conv2D(256, 1, activation='relu', padding='same')(x)
     a1 = BatchNormalization()(a1)
     
-    a2 = Conv2D(256, 3, dilation_rate=4, activation='relu', padding='same')(x)
+    a2 = Conv2D(256, 3, dilation_rate=2, activation='relu', padding='same')(x)
     a2 = BatchNormalization()(a2)
     
-    a3 = Conv2D(256, 3, dilation_rate=8, activation='relu', padding='same')(x)
+    a3 = Conv2D(256, 3, dilation_rate=4, activation='relu', padding='same')(x)
     a3 = BatchNormalization()(a3)
-    
-    a4 = Conv2D(256, 3, dilation_rate=16, activation='relu', padding='same')(x)
-    a4 = BatchNormalization()(a4)
     
     gap = GlobalAveragePooling2D()(x)
     gap = Reshape((1, 1, 512))(gap)
     gap = Conv2D(256, 1, activation='relu', padding='same')(gap)
     gap = BatchNormalization()(gap)
-    gap = Lambda(lambda t: tf.image.resize(t, [x.shape[1], x.shape[2]], method='bilinear'))(gap)
+    gap = Lambda(lambda t: tf.image.resize(t, [48, 48], method='bilinear'))(gap)
     
-    x = Concatenate()([a1, a2, a3, a4, gap])
+    x = Concatenate()([a1, a2, a3, gap])
     x = Conv2D(256, 1, activation='relu', padding='same')(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
     
-    # Decoder
-    x = UpSampling2D(4)(x)
+    # Decoder with skip connections
+    x = UpSampling2D(2)(x)  # 48 -> 96
     x = Concatenate()([x, c3])
     x = Conv2D(256, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     
-    x = UpSampling2D(4)(x)
+    x = UpSampling2D(2)(x)  # 96 -> 192
+    x = Concatenate()([x, c2])
+    x = Conv2D(128, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
+    
+    x = UpSampling2D(2)(x)  # 192 -> 384
     x = Concatenate()([x, c1])
     x = Conv2D(64, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
@@ -359,7 +363,7 @@ def deeplabv3_plus():
 def fpn():
     i = Input((config.IMG_SIZE, config.IMG_SIZE, 3))
     
-    # Backbone
+    # Backbone (simpler)
     c1 = conv_block(i, 64)
     p1 = MaxPooling2D()(c1)
     
@@ -370,34 +374,30 @@ def fpn():
     p3 = MaxPooling2D()(c3)
     
     c4 = conv_block(p3, 512)
-    p4 = MaxPooling2D()(c4)
-    
-    c5 = conv_block(p4, 1024)
     
     # Top-down pathway
-    p5 = Conv2D(256, 1, padding='same')(c5)
     p4 = Conv2D(256, 1, padding='same')(c4)
     p3 = Conv2D(256, 1, padding='same')(c3)
     p2 = Conv2D(256, 1, padding='same')(c2)
     
     # Lateral connections
-    m5 = p5
-    m4 = Add()([UpSampling2D()(m5), p4])
+    m4 = p4
     m3 = Add()([UpSampling2D()(m4), p3])
     m2 = Add()([UpSampling2D()(m3), p2])
     
-    # Final convolutions
-    o5 = Conv2D(256, 3, padding='same')(m5)
+    # Final feature maps
     o4 = Conv2D(256, 3, padding='same')(m4)
     o3 = Conv2D(256, 3, padding='same')(m3)
     o2 = Conv2D(256, 3, padding='same')(m2)
     
-    # Combine all feature maps
-    o = Concatenate()([o2, UpSampling2D(2)(o3), UpSampling2D(4)(o4), UpSampling2D(8)(o5)])
-    o = Conv2D(512, 3, padding='same')(o)
+    # Combine feature maps
+    o = Concatenate()([o2, UpSampling2D(2)(o3), UpSampling2D(4)(o4)])
+    o = Conv2D(256, 3, padding='same')(o)
     o = BatchNormalization()(o)
     o = Activation('relu')(o)
-    o = UpSampling2D(2)(o)
+    
+    # Upsample to original size
+    o = UpSampling2D(4)(o)
     
     o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(o)
     return Model(i, o)
