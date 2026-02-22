@@ -289,12 +289,12 @@ def unet():
 def deeplabv3_plus():
     i = Input((config.IMG_SIZE, config.IMG_SIZE, 3))
     
-    # Encoder (shallower to preserve spatial info)
+    # Simple encoder (no ASPP - better for small datasets)
     x = Conv2D(64, 3, padding='same', activation='relu')(i)
     x = BatchNormalization()(x)
     x = Conv2D(64, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    c1 = x  # 384
+    c1 = x
     
     x = MaxPooling2D()(x)
     
@@ -302,7 +302,7 @@ def deeplabv3_plus():
     x = BatchNormalization()(x)
     x = Conv2D(128, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    c2 = x  # 192
+    c2 = x
     
     x = MaxPooling2D()(x)
     
@@ -310,48 +310,38 @@ def deeplabv3_plus():
     x = BatchNormalization()(x)
     x = Conv2D(256, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    c3 = x  # 96
+    c3 = x
     
     x = MaxPooling2D()(x)
     
     x = Conv2D(512, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Conv2D(512, 3, padding='same', activation='relu')(x)
-    x = BatchNormalization()(x)  # 48
+    x = BatchNormalization()(x)
+    c4 = x
     
-    # ASPP with smaller dilation rates (feature map is 48x48)
-    a1 = Conv2D(256, 1, activation='relu', padding='same')(x)
-    a1 = BatchNormalization()(a1)
-    
-    a2 = Conv2D(256, 3, dilation_rate=2, activation='relu', padding='same')(x)
-    a2 = BatchNormalization()(a2)
-    
-    a3 = Conv2D(256, 3, dilation_rate=4, activation='relu', padding='same')(x)
-    a3 = BatchNormalization()(a3)
-    
-    gap = GlobalAveragePooling2D()(x)
-    gap = Reshape((1, 1, 512))(gap)
-    gap = Conv2D(256, 1, activation='relu', padding='same')(gap)
-    gap = BatchNormalization()(gap)
-    gap = Lambda(lambda t: tf.image.resize(t, [48, 48], method='bilinear'))(gap)
-    
-    x = Concatenate()([a1, a2, a3, gap])
-    x = Conv2D(256, 1, activation='relu', padding='same')(x)
+    # Bottleneck
+    x = Conv2D(1024, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
     
-    # Decoder with skip connections
-    x = UpSampling2D(2)(x)  # 48 -> 96
+    # Decoder with skip connections (like U-Net)
+    x = UpSampling2D()(x)
+    x = Concatenate()([x, c4])
+    x = Conv2D(512, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
+    
+    x = UpSampling2D()(x)
     x = Concatenate()([x, c3])
     x = Conv2D(256, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     
-    x = UpSampling2D(2)(x)  # 96 -> 192
+    x = UpSampling2D()(x)
     x = Concatenate()([x, c2])
     x = Conv2D(128, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     
-    x = UpSampling2D(2)(x)  # 192 -> 384
+    x = UpSampling2D()(x)
     x = Concatenate()([x, c1])
     x = Conv2D(64, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
@@ -363,7 +353,7 @@ def deeplabv3_plus():
 def fpn():
     i = Input((config.IMG_SIZE, config.IMG_SIZE, 3))
     
-    # Backbone (simpler)
+    # Encoder
     c1 = conv_block(i, 64)
     p1 = MaxPooling2D()(c1)
     
@@ -371,29 +361,24 @@ def fpn():
     p2 = MaxPooling2D()(c2)
     
     c3 = conv_block(p2, 256)
+    p3 = MaxPooling2D()(c3)
+    
+    c4 = conv_block(p3, 512)
     
     # Top-down pathway
-    p3 = Conv2D(256, 1, padding='same')(c3)
-    p2 = Conv2D(256, 1, padding='same')(c2)
+    x = UpSampling2D()(c4)
+    x = Concatenate()([x, c3])
+    x = conv_block(x, 256)
     
-    # Lateral connections
-    m3 = p3
-    m2 = Add()([UpSampling2D()(m3), p2])
+    x = UpSampling2D()(x)
+    x = Concatenate()([x, c2])
+    x = conv_block(x, 128)
     
-    # Final feature maps
-    o3 = Conv2D(256, 3, padding='same')(m3)
-    o2 = Conv2D(256, 3, padding='same')(m2)
+    x = UpSampling2D()(x)
+    x = Concatenate()([x, c1])
+    x = conv_block(x, 64)
     
-    # Combine feature maps and upsample to original size
-    o = Concatenate()([o2, UpSampling2D(2)(o3)])
-    o = Conv2D(256, 3, padding='same')(o)
-    o = BatchNormalization()(o)
-    o = Activation('relu')(o)
-    
-    # Upsample to original size (64 -> 256)
-    o = UpSampling2D(4)(o)
-    
-    o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(o)
+    o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(x)
     return Model(i, o)
 
 
@@ -615,6 +600,10 @@ def main():
     models = {}
     model_paths = {}
     
+    # Compute class weights for imbalanced data
+    class_weights = compute_class_weights(Y)
+    print(f"Class weights: {class_weights}")
+    
     callbacks = [
         ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6, verbose=1),
         EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=1)
@@ -626,10 +615,13 @@ def main():
     print("="*60)
     
     model_attn = attention_unet()
-    model_attn.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model_attn.compile(optimizer=Adam(config.LEARNING_RATE), 
+                     loss='sparse_categorical_crossentropy', 
+                     metrics=['accuracy'])
     
     h1 = model_attn.fit(X_train, Y_train, validation_data=(X_val, Y_val), 
                        epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                       class_weight=class_weights,
                        verbose=1, callbacks=callbacks)
     model_attn.save(f"{config.CHECKPOINT_DIR}/attention_unet.keras")
     histories['Attention U-Net'] = h1
@@ -643,10 +635,13 @@ def main():
     print("="*60)
     
     model_unet = unet()
-    model_unet.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model_unet.compile(optimizer=Adam(config.LEARNING_RATE), 
+                      loss='sparse_categorical_crossentropy', 
+                      metrics=['accuracy'])
     
     h2 = model_unet.fit(X_train, Y_train, validation_data=(X_val, Y_val),
                        epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                       class_weight=class_weights,
                        verbose=1, callbacks=callbacks)
     model_unet.save(f"{config.CHECKPOINT_DIR}/unet.keras")
     histories['U-Net'] = h2
@@ -660,10 +655,13 @@ def main():
     print("="*60)
     
     model_deeplab = deeplabv3_plus()
-    model_deeplab.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model_deeplab.compile(optimizer=Adam(config.LEARNING_RATE), 
+                         loss='sparse_categorical_crossentropy', 
+                         metrics=['accuracy'])
     
     h3 = model_deeplab.fit(X_train, Y_train, validation_data=(X_val, Y_val),
                           epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                          class_weight=class_weights,
                           verbose=1, callbacks=callbacks)
     model_deeplab.save(f"{config.CHECKPOINT_DIR}/deeplabv3plus.keras")
     histories['DeepLabV3+'] = h3
@@ -677,10 +675,13 @@ def main():
     print("="*60)
     
     model_fpn = fpn()
-    model_fpn.compile(optimizer=Adam(config.LEARNING_RATE), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model_fpn.compile(optimizer=Adam(config.LEARNING_RATE), 
+                    loss='sparse_categorical_crossentropy', 
+                    metrics=['accuracy'])
     
     h4 = model_fpn.fit(X_train, Y_train, validation_data=(X_val, Y_val),
                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
+                      class_weight=class_weights,
                       verbose=1, callbacks=callbacks)
     model_fpn.save(f"{config.CHECKPOINT_DIR}/fpn.keras")
     histories['FPN'] = h4
