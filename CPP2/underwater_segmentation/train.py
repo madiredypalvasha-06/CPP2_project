@@ -197,35 +197,74 @@ def unet():
 def deeplab():
     i = Input((config.IMG_SIZE, config.IMG_SIZE, 3))
     
-    # Simple encoder
+    # Encoder (similar to ResNet backbone)
     x = Conv2D(64, 3, padding='same', activation='relu')(i)
     x = BatchNormalization()(x)
     x = Conv2D(64, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    p1 = MaxPooling2D()(x)  # 128
+    c1 = x  # 256
+    x = MaxPooling2D()(x)
     
-    x = Conv2D(128, 3, padding='same', activation='relu')(p1)
+    x = Conv2D(128, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Conv2D(128, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
-    p2 = MaxPooling2D()(x)  # 64
+    c2 = x  # 128
+    x = MaxPooling2D()(x)
     
-    x = Conv2D(256, 3, padding='same', activation='relu')(p2)
+    x = Conv2D(256, 3, padding='same', activation='relu')(x)
     x = BatchNormalization()(x)
     x = Conv2D(256, 3, padding='same', activation='relu')(x)
-    x = BatchNormalization()(x)  # 64
+    x = BatchNormalization()(x)
+    c3 = x  # 64
+    x = MaxPooling2D()(x)
     
-    # ASPP-like module with dilated convolutions
+    x = Conv2D(512, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
+    x = Conv2D(512, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.3)(x)  # 32
+    
+    # ASPP (Atrous Spatial Pyramid Pooling)
+    # 1x1 conv
     a1 = Conv2D(256, 1, activation='relu', padding='same')(x)
-    a2 = Conv2D(256, 3, dilation_rate=4, activation='relu', padding='same')(x)
-    a3 = Conv2D(256, 3, dilation_rate=8, activation='relu', padding='same')(x)
+    a1 = BatchNormalization()(a1)
     
-    x = Concatenate()([a1, a2, a3])
+    # 3x3 dilated convs with different rates
+    a2 = Conv2D(256, 3, dilation_rate=2, activation='relu', padding='same')(x)
+    a2 = BatchNormalization()(a2)
+    
+    a3 = Conv2D(256, 3, dilation_rate=4, activation='relu', padding='same')(x)
+    a3 = BatchNormalization()(a3)
+    
+    # Global Average Pooling branch with proper upsampling
+    gap = tf.keras.layers.GlobalAveragePooling2D()(x)
+    gap = tf.keras.layers.Reshape((1, 1, 512))(gap)
+    gap = Conv2D(256, 1, activation='relu', padding='same')(gap)
+    gap = BatchNormalization()(gap)
+    gap = tf.keras.layers.Lambda(lambda t: tf.image.resize(t, [32, 32], method='bilinear'))(gap)
+    
+    # Concatenate all ASPP branches
+    x = Concatenate()([a1, a2, a3, gap])
     x = Conv2D(256, 1, activation='relu', padding='same')(x)
+    x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
     
-    # Upsample back to 256x256
-    x = UpSampling2D(4)(x)  # 64 -> 256
+    # Decoder with skip connections
+    x = UpSampling2D(2)(x)  # 32 -> 64
+    x = Concatenate()([x, c3])
+    x = Conv2D(256, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
+    
+    x = UpSampling2D(2)(x)  # 64 -> 128
+    x = Concatenate()([x, c2])
+    x = Conv2D(128, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
+    
+    x = UpSampling2D(2)(x)  # 128 -> 256
+    x = Concatenate()([x, c1])
+    x = Conv2D(64, 3, padding='same', activation='relu')(x)
+    x = BatchNormalization()(x)
     
     o = Conv2D(config.NUM_CLASSES, 1, activation='softmax')(x)
     return Model(i, o)
