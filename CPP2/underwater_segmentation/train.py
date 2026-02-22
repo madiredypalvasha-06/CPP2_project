@@ -36,7 +36,6 @@ class Config:
     EPOCHS = 15
     BATCH_SIZE = 4
     LEARNING_RATE = 1e-4
-    VAL_SPLIT = 0.15
     
     CLASS_NAMES = ['Background', 'Fish', 'Plants', 'Rocks', 'Coral', 'Wrecks', 'Water', 'Other']
     CLASS_COLORS = np.array([
@@ -91,11 +90,16 @@ def rgb_to_class(mask):
 
 def compute_class_weights(Y):
     class_counts = np.bincount(Y.flatten(), minlength=config.NUM_CLASSES)
+    # Replace 0 with 1 to avoid division by zero
+    class_counts = np.maximum(class_counts, 1)
     total = np.sum(class_counts)
-    weights = total / (config.NUM_CLASSES * class_counts + 1e-6)
+    weights = total / (config.NUM_CLASSES * class_counts)
+    # Normalize weights
     weights = weights / weights.sum() * config.NUM_CLASSES
+    # Cap weights to avoid extreme values
+    weights = np.clip(weights, 0.1, 10.0)
     # Convert to dict for Keras
-    return {i: w for i, w in enumerate(weights)}
+    return {i: float(w) for i, w in enumerate(weights)}
 
 
 def load_data():
@@ -580,7 +584,7 @@ def main():
     print("Attention U-Net + U-Net + DeepLabV3+ + FPN + Ensemble")
     print("="*70)
     print(f"Image Size: {config.IMG_SIZE} | Epochs: {config.EPOCHS}")
-    print(f"Batch: {config.BATCH_SIZE} | LR: {config.LEARNING_RATE} | Val Split: {config.VAL_SPLIT}")
+    print(f"Batch: {config.BATCH_SIZE} | LR: {config.LEARNING_RATE}")
     print("="*70 + "\n")
     
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
@@ -588,27 +592,13 @@ def main():
     
     X, Y = load_data()
     
-    indices = np.random.permutation(len(X))
-    val_size = int(len(X) * config.VAL_SPLIT)
-    val_idx = indices[:val_size]
-    train_idx = indices[val_size:]
-    
-    X_train, Y_train = X[train_idx], Y[train_idx]
-    X_val, Y_val = X[val_idx], Y[val_idx]
-    
-    print(f"Training: {len(X_train)} | Validation: {len(X_val)}")
-    
     histories = {}
     models = {}
     model_paths = {}
     
-    # Compute class weights for imbalanced data
-    class_weights = compute_class_weights(Y)
-    print(f"Class weights: {class_weights}")
-    
     callbacks = [
-        ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6, verbose=1),
-        EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=1)
+        ReduceLROnPlateau(monitor='loss', factor=0.5, patience=5, min_lr=1e-6, verbose=1),
+        EarlyStopping(monitor='loss', patience=10, restore_best_weights=True, verbose=1)
     ]
     
     # Train Attention U-Net
@@ -621,9 +611,8 @@ def main():
                      loss='sparse_categorical_crossentropy', 
                      metrics=['accuracy'])
     
-    h1 = model_attn.fit(X_train, Y_train, validation_data=(X_val, Y_val), 
+    h1 = model_attn.fit(X, Y, 
                        epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                       class_weight=class_weights,
                        verbose=1, callbacks=callbacks)
     model_attn.save(f"{config.CHECKPOINT_DIR}/attention_unet.keras")
     histories['Attention U-Net'] = h1
@@ -641,9 +630,8 @@ def main():
                       loss='sparse_categorical_crossentropy', 
                       metrics=['accuracy'])
     
-    h2 = model_unet.fit(X_train, Y_train, validation_data=(X_val, Y_val),
+    h2 = model_unet.fit(X, Y,
                        epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                       class_weight=class_weights,
                        verbose=1, callbacks=callbacks)
     model_unet.save(f"{config.CHECKPOINT_DIR}/unet.keras")
     histories['U-Net'] = h2
@@ -661,9 +649,8 @@ def main():
                          loss='sparse_categorical_crossentropy', 
                          metrics=['accuracy'])
     
-    h3 = model_deeplab.fit(X_train, Y_train, validation_data=(X_val, Y_val),
+    h3 = model_deeplab.fit(X, Y,
                           epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                          class_weight=class_weights,
                           verbose=1, callbacks=callbacks)
     model_deeplab.save(f"{config.CHECKPOINT_DIR}/deeplabv3plus.keras")
     histories['DeepLabV3+'] = h3
@@ -681,9 +668,8 @@ def main():
                     loss='sparse_categorical_crossentropy', 
                     metrics=['accuracy'])
     
-    h4 = model_fpn.fit(X_train, Y_train, validation_data=(X_val, Y_val),
+    h4 = model_fpn.fit(X, Y,
                       epochs=config.EPOCHS, batch_size=config.BATCH_SIZE,
-                      class_weight=class_weights,
                       verbose=1, callbacks=callbacks)
     model_fpn.save(f"{config.CHECKPOINT_DIR}/fpn.keras")
     histories['FPN'] = h4
