@@ -1,18 +1,1 @@
-# Mac
 .DS_Store
-
-# PDFs and ZIPs (if you don’t want them)
-*.pdf
-*.zip
-
-# Python
-__pycache__/
-*.pyc
-
-# Underwater project
-CPP2/underwater_segmentation/checkpoints/
-CPP2/underwater_segmentation/__pycache__/
-
-# Virtual environments
-venv/
-venv311/
