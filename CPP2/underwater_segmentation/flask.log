@@ -1,0 +1,34 @@
+==================================================
+Underwater Semantic Segmentation
+==================================================
+
+Loading model...
+Model loaded successfully!
+
+Starting server...
+Opening browser at http://127.0.0.1:5001
+
+Press Ctrl+C to stop the server
+
+ * Serving Flask app 'app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://10.106.21.236:5001
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [23/Feb/2026 16:19:37] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 16:19:52] "[33mGET /static/loading.gif HTTP/1.1[0m" 404 -
+127.0.0.1 - - [23/Feb/2026 16:19:53] "POST /predict HTTP/1.1" 200 -
+127.0.0.1 - - [23/Feb/2026 16:20:14] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [24/Feb/2026 13:10:22] "[33mGET /static/loading.gif HTTP/1.1[0m" 404 -
+127.0.0.1 - - [24/Feb/2026 13:10:23] "POST /predict HTTP/1.1" 200 -
+127.0.0.1 - - [24/Feb/2026 13:10:44] "[33mGET /static/loading.gif HTTP/1.1[0m" 404 -
+127.0.0.1 - - [24/Feb/2026 13:10:45] "POST /predict HTTP/1.1" 200 -
+127.0.0.1 - - [24/Feb/2026 13:10:55] "[33mGET /static/loading.gif HTTP/1.1[0m" 404 -
+127.0.0.1 - - [24/Feb/2026 13:10:56] "POST /predict HTTP/1.1" 200 -
+127.0.0.1 - - [24/Feb/2026 13:12:01] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [24/Feb/2026 13:12:07] "[33mGET /static/loading.gif HTTP/1.1[0m" 404 -
+127.0.0.1 - - [24/Feb/2026 13:12:07] "POST /predict HTTP/1.1" 200 -
+127.0.0.1 - - [24/Feb/2026 15:42:30] "[33mGET /static/loading.gif HTTP/1.1[0m" 404 -
+127.0.0.1 - - [24/Feb/2026 15:42:32] "POST /predict HTTP/1.1" 200 -

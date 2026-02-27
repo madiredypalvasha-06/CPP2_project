@@ -1,70 +1,53 @@
-# Underwater Semantic Segmentation
+# Underwater Semantic Segmentation Project
 
-## Overview
+## Project Summary
+Deep learning-based semantic segmentation for underwater marine object detection using SUIM dataset.
 
-This project implements a comprehensive underwater semantic segmentation framework using:
-- **U-Net**: Encoder-decoder architecture with skip connections
-- **DeepLabV3+**: ASPP module for multi-scale context extraction  
-- **Hybrid Model**: Fusion of both architectures for improved accuracy
+## Models Available
+1. **U-Net Enhanced** - Working (used in website)
+2. **DeepLabV3+** - Requires 256x256 input (compatible)
+3. **U-Net** - Requires older TensorFlow version
+4. **Attention U-Net** - Requires older TensorFlow version
 
 ## Dataset
+- **SUIM Dataset** - 1525 training images, 8 classes:
+  - Background, Fish, Plants, Rocks, Coral, Wrecks, Water, Other
 
-Uses SUIM (Semantic Underwater Image Dataset) with 6 classes:
-- Background, Fish, Plants, Rocks, Coral, Wrecks
+## How to Run
 
-## Project Structure
-
-```
-underwater_segmentation/
-├── train.py              # Main training script
-├── README.md            # This file
-├── checkpoints/         # Saved model weights
-│   ├── unet_model.keras
-│   └── deeplab_model.keras
-└── results/            # Output visualizations
-    ├── segmentation_results.png
-    ├── training_history.png
-    ├── per_class_metrics.png
-    ├── class_legend.png
-    └── metrics.txt
-```
-
-## Usage
-
-### Training
-
+### 1. Website
 ```bash
-cd underwater_segmentation
-python3 train.py
+cd /Users/palvashamadireddy/Downloads/CPP2_project/CPP2/underwater_segmentation
+source venv311/bin/activate
+python app.py
+```
+Then open http://127.0.0.1:5001
+
+### 2. Generate Outputs
+```bash
+source venv311/bin/activate
+python generate_final.py
 ```
 
-### Configuration
+### 3. Train New Model
+```bash
+source venv311/bin/activate
+python train_quick200.py
+```
 
-Edit the `Config` class in `train.py` to modify:
-- `EPOCHS`: Number of training epochs (default: 30)
-- `BATCH_SIZE`: Batch size (default: 2)
-- `LEARNING_RATE`: Learning rate (default: 1e-4)
+## Output Images (results/)
+- `segmentation_output.png` - Main segmentation results
+- `model_comparison.png` - Model comparison
+- `training_curves.png` - Training metrics
+- `class_distribution.png` - Class distribution
 
-## Output Files
+## Files
+- `app.py` - Flask website
+- `train_quick200.py` - Training script
+- `generate_final.py` - Generate outputs
+- `checkpoints/segmentation_final.keras` - Trained model
+- `checkpoints/unet_enhanced.keras` - U-Net Enhanced model
+- `checkpoints/deeplabv3plus.keras` - DeepLabV3+ model
 
-| File | Description |
-|------|-------------|
-| `segmentation_results.png` | Visual comparison of all models |
-| `training_history.png` | Loss and accuracy curves |
-| `per_class_metrics.png` | IoU comparison per class |
-| `class_legend.png` | Color legend for classes |
-| `metrics.txt` | Detailed metrics in text format |
-
-## Evaluation Metrics
-
-- **Mean IoU**: Intersection over Union across all classes
-- **Dice Score**: F1 score for segmentation quality
-- **Pixel Accuracy**: Overall pixel-wise accuracy
-
-## Requirements
-
-- Python 3.11+
-- TensorFlow 2.x
-- OpenCV
-- NumPy
-- Matplotlib
+## Note
+Some models (unet.keras, attention_unet.keras) require older TensorFlow version and cannot be loaded with current version.
